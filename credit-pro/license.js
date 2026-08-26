@@ -15,6 +15,8 @@
 const WORKER = "https://square-license.stats-okinawa.workers.dev";
 
 /* ★★ ここだけ書き換えてください ★★
+   【注意】このファイルを新しい版で上書きすると、下のPAY_URLも一緒に置き換わります。
+   ZIPを差し替えたあとは、必ずこの行が自分のリンクになっているか確認してください。
    Squareの支払いリンクURL。Square管理画面で作成して貼り替えます。
    作成時の設定：
      金額 500円 ／ Frequency: One-time（Monthlyにすると定期課金になります）／
@@ -23,7 +25,7 @@ const WORKER = "https://square-license.stats-okinawa.workers.dev";
        テスト環境  : https://ck121212195.github.io/PDF/credit-pro/
        本番        : https://kazumono.com/credit-pro/
    未設定（XXXXXXXXのまま）だと購入ボタンは押せず、画面にその旨を表示します。 */
-const PAY_URL = "https://square.link/u/XXXXXXXX";
+const PAY_URL = "https://square.link/u/E7Xmnxwy";
 
 /** 支払いリンクが未設定かどうか。未設定のまま黙って遷移させないための判定 */
 export function payUrlReady() {

@@ -3,10 +3,10 @@
  * 計算は engine.js、Excel生成は xlsx-export.js。ここはUIだけを担当する。
  * ========================================================================== */
 import { evaluate, emptyInput, INDUSTRIES, CAPITAL_TIERS, LISTING_OPTIONS, POLICY }
-  from "./engine.js?v=8";
-import { downloadXlsx } from "./xlsx-export.js?v=8";
-import { checkLicense, payUrl, payUrlReady } from "./license.js?v=8";
-import { scanPdf, buildPeriod, validatePeriod, toEngineFields } from "./pdf-extract.js?v=8";
+  from "./engine.js?v=9";
+import { downloadXlsx } from "./xlsx-export.js?v=9";
+import { checkLicense, payUrl, payUrlReady } from "./license.js?v=9";
+import { scanPdf, buildPeriod, validatePeriod, toEngineFields } from "./pdf-extract.js?v=9";
 
 const $ = (id) => document.getElementById(id);
 const COLS = ["今期（直近）", "前期", "前々期"];
@@ -138,10 +138,26 @@ function showGate(which) {
   });
 }
 
+/** 決済まわりで何が起きているかを画面に出し、切り分けられるようにする */
+function showLicenseDiag(st, order) {
+  const el = $("licDiag");
+  if (!el) return;
+  const label = { licensed: "購入済み", unlicensed: "未購入", offline: "確認できず" }[st] || st;
+  const why =
+    st === "licensed" ? "解錠されています。"
+    : st === "offline" ? "Workerに接続できませんでした。ALLOW_ORIGIN の値とデプロイをご確認ください。"
+    : order ? "注文番号は受け取れていますが、決済記録が見つかりません。Squareのwebhook設定と、Workerが最新版かをご確認ください。"
+    : "まだ決済していない状態です。購入して戻ってくると、ここに注文番号が入ります。";
+  el.innerHTML = `<b>決済の状態：${label}</b><span>持ち帰った注文番号：` +
+    `<code>${order ? esc(String(order)) : "（なし）"}</code><br>${why}</span>`;
+  el.hidden = false;
+}
+
 async function refreshLicense() {
   showGate("gateWait");
-  const { state: st } = await checkLicense();
+  const { state: st, order } = await checkLicense();
   licensed = st === "licensed";
+  showLicenseDiag(st, order);
   showGate(st === "licensed" ? "gateOk" : st === "offline" ? "gateOffline" : "gateBuy");
   if (st === "licensed" && window.gtag) gtag("event", "license_ok", { tool: "credit-pro" });
 }

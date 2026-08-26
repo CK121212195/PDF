@@ -660,6 +660,9 @@ input,select,textarea,button{font-weight:600}
           <p class="note-s" id="buyNote" style="margin-top:10px;color:var(--warn);font-weight:700;"></p>
           <p class="note-s" style="margin-top:12px;">入力した内容はこの画面に残ります。決済後、同じ内容のまま続けてダウンロードできます。</p>
 
+          <!-- 決済の状態を画面に出す。公開前に削除して構いません（残しても害はありません） -->
+          <div class="tip" id="licDiag" hidden></div>
+
           <!-- ▼▼▼ テスト用。本番公開の前に、ここから ▲▲▲ までを丸ごと削除してください ▼▼▼ -->
           <div class="testbox" id="testBox">
             <b>【テスト用】決済せずにExcelを確認する</b>
@@ -779,7 +782,7 @@ input,select,textarea,button{font-weight:600}
     </div>
   </main>
 
-  <p class="verstamp">ビルド v8 (2026-08-27)</p>
+  <p class="verstamp">ビルド v9 (2026-08-27)</p>
 
   <footer class="foot">
     <div class="wrap foot__inner">
@@ -797,7 +800,7 @@ input,select,textarea,button{font-weight:600}
 </div>
 
 <script src="./vendor/exceljs.min.js" defer></script>
-<script type="module" src="./app.js?v=8"></script>
+<script type="module" src="./app.js?v=9"></script>
 
 </body>
 </html>
