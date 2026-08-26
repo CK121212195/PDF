@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>決算書PDF 読み取り検証ハーネス</title>
+<meta name="robots" content="noindex,nofollow">
+<style>
+:root{
+  --navy:#1B2A4A; --navyD:#12203A; --steel:#2E6E8E; --steelL:#E8F0F5;
+  --bg:#F5F7FA; --line:#D6DCE5; --muted:#5A6473; --ink:#1A1A1A;
+  --ok:#1B7F5C; --warn:#C4632B; --ng:#B03A3A;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.7;
+  font-family:"Meiryo UI","Hiragino Kaku Gothic ProN","Yu Gothic UI",sans-serif}
+header{background:var(--navyD);color:#fff;padding:16px 22px}
+header h1{margin:0;font-size:18px}
+header p{margin:4px 0 0;font-size:12px;color:#B9C4D4}
+.wrap{max-width:1500px;margin:0 auto;padding:20px}
+.card{background:#fff;border:1px solid var(--line);border-radius:10px;margin-bottom:16px;overflow:hidden}
+.card>h2{margin:0;background:var(--navy);color:#fff;font-size:13px;padding:9px 14px}
+.card>.body{padding:14px}
+.drop{border:2px dashed var(--line);border-radius:14px;padding:34px 20px;text-align:center;cursor:pointer;background:#fafbfc}
+.drop:hover,.drop.is-over{border-color:var(--steel);background:var(--steelL)}
+.drop b{display:block;font-size:17px;margin-bottom:6px}
+.drop span{font-size:13px;color:var(--muted)}
+button{font:inherit;font-size:13px;padding:7px 14px;border-radius:6px;border:1px solid var(--navy);
+  background:var(--navy);color:#fff;cursor:pointer}
+button.ghost{background:#fff;color:var(--navy)}
+button:disabled{opacity:.5;cursor:default}
+button.mini{padding:3px 9px;font-size:12px;border-radius:5px}
+.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.prog{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin:10px 0}
+.prog>i{display:block;height:100%;width:0;background:var(--steel);transition:width .2s}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{border:1px solid var(--line);padding:5px 7px;text-align:left;vertical-align:top}
+thead th{background:var(--steelL);color:var(--navy);position:sticky;top:0;font-size:11.5px}
+td.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.bad{background:#FDF0EC}
+tr.warn{background:#FEF9EC}
+.tag{display:inline-block;padding:1px 7px;border-radius:99px;font-size:11px;font-weight:700;color:#fff}
+.t-ok{background:var(--ok)} .t-sp{background:#4E8C7A} .t-wn{background:var(--warn)} .t-ng{background:var(--ng)}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.kpi>div{background:var(--steelL);border-radius:10px;padding:12px 14px}
+.kpi b{display:block;font-size:26px;line-height:1.2;color:var(--navy);font-variant-numeric:tabular-nums}
+.kpi span{font-size:11.5px;color:var(--muted)}
+.scroll{max-height:62vh;overflow:auto}
+label.f{display:inline-block;margin:0 14px 8px 0;font-size:12.5px}
+label.f>span{display:block;color:var(--muted);font-size:11.5px}
+input,select{padding:5px 8px;border:1px solid var(--line);border-radius:6px;font:inherit;font-size:13px}
+details>summary{cursor:pointer;font-size:12px;color:var(--steel)}
+pre{background:#F7F9FB;border:1px solid var(--line);border-radius:6px;padding:8px;font-size:11.5px;
+  overflow:auto;max-height:260px;margin:6px 0 0}
+.note{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>決算書PDF 読み取り検証ハーネス</h1>
+  <p>与信判断検討書 Pro の抽出精度を測定するための検証用ページです。公開サービスではありません。ファイルはブラウザ内でのみ処理され、送信されません。</p>
+  <p style="margin-top:14px;">
+    <a href="./credit-pro/" style="display:inline-block;padding:10px 20px;border-radius:999px;
+       background:#fff;color:#12263A;font-weight:700;text-decoration:none;">
+      → サービス本体（与信判断検討書 Pro）を開く</a>
+    <span style="display:block;margin-top:10px;font-size:12px;opacity:.7;">ビルド v6 (2026-08-26)</span>
+    <span style="display:block;margin-top:8px;font-size:13px;opacity:.85;">
+      手入力の補完・決算期の自動整列・Square決済は、こちらのページに入っています。このハーネスは精度測定専用です。</span>
+  </p>
+</header>
+
+<div class="wrap">
+
+  <div class="card"><h2>1. PDFを投入する（何件でも可・フォルダごとドロップ可）</h2><div class="body">
+    <div class="drop" id="drop" tabindex="0">
+      <b>決算書PDFをここにドラッグ＆ドロップ</b>
+      <span>クリックしてまとめて選択することもできます。250件程度なら一度に投入できます。</span>
+      <input type="file" id="file" accept="application/pdf,.pdf" multiple hidden>
+    </div>
+    <div class="prog" id="progWrap" hidden><i id="prog"></i></div>
+    <p class="note" id="progMsg"></p>
+    <div class="bar" style="margin-top:10px">
+      <button class="ghost" id="btnStop" hidden>中断する</button>
+      <button class="ghost" id="btnCsv" hidden>結果をCSVで書き出す</button>
+      <button class="ghost" id="btnClear" hidden>結果を消す</button>
+    </div>
+  </div></div>
+
+  <div class="card" id="sumCard" hidden><h2>2. 集計</h2><div class="body">
+    <div class="kpi" id="kpi"></div>
+    <p class="note" style="margin-top:12px">
+      <b>判定の基準</b>　
+      <span class="tag t-ok">成功</span> 貸借が一致し、必要な数値がすべて揃っている／
+      <span class="tag t-sp">ほぼ成功</span> 抽出は成功。ただし決算書自体に載っていない項目（減価償却費など）があり、そこだけ手入力が必要／
+      <span class="tag t-wn">要確認</span> 検算が合わない、または中核項目が取れていない／
+      <span class="tag t-ng">失敗</span> 財務諸表のページを見つけられなかった、または画像PDF
+    </p>
+  </div></div>
+
+  <div class="card" id="resCard" hidden><h2>3. ファイル別の結果</h2><div class="body">
+    <div class="bar">
+      <label class="f"><span>絞り込み</span>
+        <select id="filter">
+          <option value="all">すべて</option>
+          <option value="ng">失敗のみ</option>
+          <option value="sup">ほぼ成功のみ</option>
+          <option value="wn">要確認のみ</option>
+          <option value="ok">成功のみ</option>
+        </select>
+      </label>
+      <span class="note" id="cnt"></span>
+    </div>
+    <div class="scroll"><table id="tbl"></table></div>
+  </div></div>
+
+  <div class="card" id="xlCard" hidden><h2>4. Excelを作って中身を確認する</h2><div class="body">
+    <p class="note">上の表の「Excel」ボタンから、その決算書の与信判断検討書を作成できます。判定に必要な会社情報はPDFに載っていないため、ここで指定した値が使われます。</p>
+    <div style="margin-top:10px">
+      <label class="f"><span>業種</span><select id="m_industry"></select></label>
+      <label class="f"><span>資本金階層</span><select id="m_tier"></select></label>
+      <label class="f"><span>上場区分</span><select id="m_listing"></select></label>
+      <label class="f"><span>設立年月日</span><input type="date" id="m_founded" value="2005-04-01"></label>
+      <label class="f"><span>従業員数</span><input type="number" id="m_emp" value="120"></label>
+      <label class="f"><span>決算書開示</span><select id="m_disc"><option>あり</option><option>なし</option></select></label>
+    </div>
+  </div></div>
+
+</div>
+
+<script src="./vendor/exceljs.min.js" defer></script>
+<script type="module" src="./harness.js"></script>
+</body>
+</html>
