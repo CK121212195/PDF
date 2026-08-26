@@ -23,7 +23,7 @@ const WORKER = "https://square-license.stats-okinawa.workers.dev";
        テスト環境  : https://ck121212195.github.io/PDF/credit-pro/
        本番        : https://kazumono.com/credit-pro/
    未設定（XXXXXXXXのまま）だと購入ボタンは押せず、画面にその旨を表示します。 */
-const PAY_URL = "https://square.link/u/XXXXXXXX";
+const PAY_URL = "https://square.link/u/E7Xmnxwy";
 
 /** 支払いリンクが未設定かどうか。未設定のまま黙って遷移させないための判定 */
 export function payUrlReady() {
