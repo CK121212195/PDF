@@ -96,6 +96,19 @@ function init() {
     paint(); render();
   });
   $("btnXlsx").addEventListener("click", onDownload);
+  // テスト用のダウンロード。公開前に index.html の .testbox ごと削除する想定。
+  // ボタンが無ければ何もしないので、削除しても壊れない。
+  const t = $("btnTestXlsx");
+  if (t) t.addEventListener("click", async () => {
+    const note = $("testNote");
+    try {
+      note.textContent = "作成しています…";
+      await downloadXlsx(evaluate(state));
+      note.textContent = "ダウンロードしました。";
+    } catch (e) {
+      note.textContent = "作成に失敗しました：" + e.message;
+    }
+  });
   $("btnRetry").addEventListener("click", refreshLicense);
   $("btnBuy").addEventListener("click", onBuy);
   initUploader();
@@ -365,16 +378,12 @@ function initUploader() {
     if (fs.length) readFiles(fs);
   });
   $("btnApply").addEventListener("click", applyRead);
+  // 最初からやり直す：手入力した内容も含めて、まっさらな状態に戻す。
+  // 前回の入力が残っていると、次の会社の判定に混ざって事故になる。
   $("btnReread").addEventListener("click", () => {
-    pending = null;                      // 積み上げた読み取り結果も破棄する
-    accepted = null;
-    metaCompany = null;
-    metaCompanySeen = [];
-    $("companyWarn").hidden = true;
-    showStep("step3", false);
-    $("readState").hidden = true;
-    const fx = $("readFix"); if (fx) { fx.innerHTML = ""; fx.hidden = true; }
-    $("fileInput").value = "";
+    if (!confirm("入力した内容をすべて消して、最初からやり直します。よろしいですか？")) return;
+    try { sessionStorage.removeItem("kazumono.credit-pro.draft"); } catch (err) { /* noop */ }
+    location.reload();
   });
   // PDFが無い場合の導線
   $("btnNoPdf").addEventListener("click", () => {
@@ -791,6 +800,9 @@ function showRead(periods) {
            'キャッシュ・フロー計算書、製造原価報告書、販売費及び一般管理費の明細に載っています。無ければ0のままでも作成できますが、償還余力（30点）の判定には必要です。</p>';
   const fixHead = worst === "ok" ? "ここだけご確認ください" : "ここだけ入力してください";
   setFix(fix ? `<h3 class="fix-head">${fixHead}</h3>${fix}` : "");
+  // 読み取った時点で入力欄へ流し込む。判定ボタンを押すまで0が並ぶのは分かりにくいため。
+  // 不足項目の欄を作り直した後に呼ぶ（前回の入力値を拾わないようにする）。
+  applyValues();
 
   // ---- 補足メッセージ ----
   const msgs = [];
@@ -828,7 +840,12 @@ function showRead(periods) {
     : "<li>特に注意すべき点は検出されませんでした。念のため数値をご確認ください。</li>";
 }
 
-function applyRead() {
+/**
+ * 読み取った数値を入力欄へ反映する。
+ * 判定ボタンを押す前に呼ぶので、赤い枠や3期分の数値がその場で見える。
+ * 会社名・代表者情報・返済計画など、利用者が自分で入れた項目は消さない。
+ */
+function applyValues() {
   if (!pending) return;
   // 手入力欄に入れられた値を、読み取り結果へマージする（入力があったものだけ上書き）
   document.querySelectorAll("#readFix input[data-fixkey]").forEach((inp) => {
@@ -841,8 +858,9 @@ function applyRead() {
   // 前回の読み取り値が残っていると、今回読めなかった項目に古い数字が居座る。
   // 3期分すべてを一度0に戻してから入れ直す。
   const blank = emptyInput();
+  const KEEP = ["repayment"];   // 返済計画は決算書に載っておらず、利用者が入れたもの
   for (const k of Object.keys(blank))
-    if (Array.isArray(blank[k]) && blank[k].length === 3) state[k] = [0, 0, 0];
+    if (Array.isArray(blank[k]) && blank[k].length === 3 && !KEEP.includes(k)) state[k] = [0, 0, 0];
   state.terms = ["", "", ""];
   missingCells = {};   // 赤く出す対象を作り直す
 
@@ -866,11 +884,14 @@ function applyRead() {
   if (metaCompany) state.name = metaCompany;
   warnCompany();
   paint(); render();
+}
+
+/** 「この内容で判定する」を押したとき：手入力を取り込み、判定を表示する */
+function applyRead() {
+  applyValues();
+  if (window.gtag && pending) gtag("event", "pdf_applied", { tool: "credit-pro", periods: pending.length });
+  accepted = pending || accepted;   // 追加のPDFを置いたときに積み上げられるよう残す
   $("readState").hidden = true;
-  if (window.gtag) gtag("event", "pdf_applied", { tool: "credit-pro", periods: pending.length });
-  accepted = pending;   // 追加のPDFを置いたときに積み上げられるよう残す
-  pending = null;
-  // 判定と決済の段を開き、結果までスクロールする
   showStep("step4", true);
   showStep("step5", true);
   refreshLicense();
