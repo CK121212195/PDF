@@ -3,10 +3,10 @@
  * 計算は engine.js、Excel生成は xlsx-export.js。ここはUIだけを担当する。
  * ========================================================================== */
 import { evaluate, emptyInput, INDUSTRIES, CAPITAL_TIERS, LISTING_OPTIONS, POLICY }
-  from "./engine.js";
-import { downloadXlsx } from "./xlsx-export.js";
-import { checkLicense, payUrl, payUrlReady } from "./license.js";
-import { scanPdf, buildPeriod, validatePeriod, toEngineFields } from "./pdf-extract.js";
+  from "./engine.js?v=8";
+import { downloadXlsx } from "./xlsx-export.js?v=8";
+import { checkLicense, payUrl, payUrlReady } from "./license.js?v=8";
+import { scanPdf, buildPeriod, validatePeriod, toEngineFields } from "./pdf-extract.js?v=8";
 
 const $ = (id) => document.getElementById(id);
 const COLS = ["今期（直近）", "前期", "前々期"];
@@ -155,8 +155,14 @@ function onBuy(e) {
   // 支払いリンクが未設定のまま押されたときは、遷移せずに理由を出す。
   // 黙ってSquareのエラーページへ飛ばすと、原因の切り分けができなくなる。
   if (!payUrlReady()) {
-    $("buyNote").textContent =
-      "支払いリンクが未設定です。credit-pro/license.js の PAY_URL に、Squareで作成した500円のリンクを貼ってください。";
+    // 何が読み込まれているかを必ず表示する。
+    // 「直したのに直らない」の大半は、ブラウザが古いlicense.jsを使っているだけなので、
+    // 実際の値が見えれば一目で切り分けられる。
+    $("buyNote").innerHTML =
+      "支払いリンクが未設定です。credit-pro/license.js の PAY_URL に、Squareで作成したリンクを貼ってください。<br>" +
+      "いま読み込まれている値：<code>" + esc(String(payUrl())) + "</code><br>" +
+      "すでに貼り替えたのにこの表示が出る場合は、ブラウザが古いファイルを使っています。" +
+      "Ctrl+Shift+R（Mac は Cmd+Shift+R）で読み込み直してください。";
     return;
   }
   try { sessionStorage.setItem("kazumono.credit-pro.draft", JSON.stringify(state)); } catch (err) { /* noop */ }
@@ -570,18 +576,39 @@ function scaleToMillion(values, unit) {
   for (const k of MONEY_KEYS)
     if (typeof out[k] === "number") out[k] = Math.round(out[k] * unit.toMillion);
 
-  // 各項目を個別に四捨五入すると、合計どうしが1単位ずれることがある。
-  // 元の決算書では貸借が一致していたのに、換算のせいで赤い警告が出るのは誤りなので、
-  // 端数を「その他流動資産」に寄せて、資産側と負債純資産側を合わせ直す。
-  const a = (out.currentAssets || 0) + (out.fixedAssets || 0) + (out.deferred || 0);
-  const l = (out.currentLiab || 0) + (out.fixedLiab || 0) + (out.equity || 0);
-  const gap = a - l;
-  if (gap !== 0 && Math.abs(gap) <= 2 &&
-      typeof out.otherCurrentAssets === "number" && typeof out.currentAssets === "number") {
-    out.otherCurrentAssets -= gap;
-    out.currentAssets -= gap;
-  }
+  // 各項目を個別に四捨五入すると、内訳の合計が小計と1単位ずれることがある。
+  // 画面の表は内訳を足して小計を出すため、そのままだと決算書では合っていた貸借が
+  // 合わなくなり、赤い警告が出てしまう。端数は「その他」の欄に寄せて辻褄を合わせる。
+  reconcile(out);
   return out;
+}
+
+/**
+ * 換算で生じた端数を「その他◯◯」に吸収させ、内訳の合計＝小計＝貸借一致に揃える。
+ * 元の決算書で合っていたものを、換算のせいで狂わせないための処理。
+ */
+function reconcile(v) {
+  const n = (x) => (typeof x === "number" ? x : 0);
+  const fit = (parts, sub, slack) => {
+    // 小計が取れていなければ、内訳の合計をそのまま小計とする
+    if (typeof v[sub] !== "number") { v[sub] = parts.reduce((a, k) => a + n(v[k]), 0); return; }
+    const gap = v[sub] - parts.reduce((a, k) => a + n(v[k]), 0);
+    if (gap === 0 || Math.abs(gap) > 3) return;   // 大きなズレは読み取り誤りなので触らない
+    v[slack] = n(v[slack]) + gap;                  // 端数は「その他」で調整する
+  };
+  fit(["cash", "receivables", "inventory", "otherCurrentAssets"], "currentAssets", "otherCurrentAssets");
+  fit(["tangible", "otherFixedAssets"], "fixedAssets", "otherFixedAssets");
+  fit(["payables", "shortDebt", "otherCurrentLiab"], "currentLiab", "otherCurrentLiab");
+  fit(["longDebt", "otherFixedLiab"], "fixedLiab", "otherFixedLiab");
+
+  // 最後に資産側と負債・純資産側を突き合わせ、残った端数もその他流動資産に寄せる
+  const assets = n(v.currentAssets) + n(v.fixedAssets) + n(v.deferred);
+  const liabEq = n(v.currentLiab) + n(v.fixedLiab) + n(v.equity);
+  const gap = assets - liabEq;
+  if (gap !== 0 && Math.abs(gap) <= 3) {
+    v.otherCurrentAssets = n(v.otherCurrentAssets) - gap;
+    v.currentAssets = n(v.currentAssets) - gap;
+  }
 }
 
 /* ----------------------------------------------------------- 画面の段 */
@@ -847,14 +874,6 @@ function showRead(periods) {
  */
 function applyValues() {
   if (!pending) return;
-  // 手入力欄に入れられた値を、読み取り結果へマージする（入力があったものだけ上書き）
-  document.querySelectorAll("#readFix input[data-fixkey]").forEach((inp) => {
-    if (inp.value === "") return;
-    const num = parseFloat(inp.value);
-    if (Number.isNaN(num)) return;
-    const k = inp.dataset.fixkey, i = +inp.dataset.fixidx;
-    if (pending[i]) pending[i].values[k] = num;
-  });
   // 前回の読み取り値が残っていると、今回読めなかった項目に古い数字が居座る。
   // 3期分すべてを一度0に戻してから入れ直す。
   const blank = emptyInput();
@@ -886,9 +905,24 @@ function applyValues() {
   paint(); render();
 }
 
-/** 「この内容で判定する」を押したとき：手入力を取り込み、判定を表示する */
+/**
+ * 「この内容で判定する」を押したとき。
+ * 値の流し込みは読み取り直後に済ませてあるので、ここでは上書きしない。
+ * 上書きすると、利用者が表で直した数値が読み取り値に戻ってしまう。
+ * ここで取り込むのは「ここだけ入力してください」の欄だけ。
+ */
 function applyRead() {
-  applyValues();
+  document.querySelectorAll("#readFix input[data-fixkey]").forEach((inp) => {
+    if (inp.value === "") return;
+    const num = parseFloat(inp.value);
+    if (Number.isNaN(num)) return;
+    const k = inp.dataset.fixkey, i = +inp.dataset.fixidx;
+    if (!Array.isArray(state[k])) state[k] = [0, 0, 0];
+    state[k][i] = num;
+    // 埋まったので赤い表示を解除する
+    if (missingCells[k]) missingCells[k] = missingCells[k].filter((x) => x !== i);
+  });
+  paint(); render();
   if (window.gtag && pending) gtag("event", "pdf_applied", { tool: "credit-pro", periods: pending.length });
   accepted = pending || accepted;   // 追加のPDFを置いたときに積み上げられるよう残す
   $("readState").hidden = true;
