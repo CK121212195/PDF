@@ -297,6 +297,8 @@ function bodyLooksLike(kind, labels) {
 const CO_KINDS = ["株式会社", "有限会社", "合同会社", "合資会社", "合名会社"];
 // 会計用語や住所の断片が混ざっていたら、それは会社名ではなく本文の切れ端
 const CO_NG = /資産|負債|利益|損失|費用|収益|合計|計算書|報告書|剰余金|余金|原価|税引|除却|配当|事項|営業外|注記|明細|科目|金額|株主資本|変動|附属|監査|決算|貸借|損益|現在|まで|から|支社|支店|本社|営業所|御中|様|[0-9]\s*[年月日]/;
+// 提出会社ではないのに有価証券報告書の表紙に必ず載る名前。これを社名として拾わない。
+const CO_EXCLUDE = /証券取引所|取引所|信託銀行|証券代行|監査法人|会計事務所|印刷|EDINET|縦覧/;
 const CO_OK = /^[ぁ-んァ-ヶ一-龥ａ-ｚＡ-Ｚa-zA-Z0-9・ー]{2,20}$/;
 
 /**
@@ -325,6 +327,21 @@ export function detectUnit(pageTexts) {
  */
 export function detectCompany(pageTexts) {
   const t = pageTexts.join("");
+
+  // ① 有価証券報告書の表紙は「【会社名】株式会社◯◯」と明記している。
+  //    ここが読めれば推測は要らないので、最優先で採用する。
+  // 本文の正規化で【】は既に外れているため、括弧なしの形で照合する。
+  // 例：「…事業年度第13期(…)会社名株式会社マネーフォワード英訳名MoneyForward…」
+  const KIND_RE = "株式会社|有限会社|合同会社|合資会社|合名会社";
+  const labeled = (pageTexts[0] || "").match(new RegExp(
+    "(?:会社名|商号|名称)\\s*((?:" + KIND_RE + ")[ぁ-んァ-ヶ一-龥ａ-ｚＡ-Ｚa-zA-Z0-9・ー]{1,20}" +
+    "|[ぁ-んァ-ヶ一-龥ａ-ｚＡ-Ｚa-zA-Z0-9・ー]{1,20}(?:" + KIND_RE + "))"));
+  if (labeled) {
+    // 直後の見出し語（英訳名 など）を巻き込んでいたら落とす
+    const n = labeled[1].replace(/(英訳名|代表者|本店|電話番号|事務連絡者|最寄り|縦覧).*$/, "");
+    if (n.length >= 4) return n;
+  }
+
   const cands = new Map();
   const add = (n) => { if (n) cands.set(n, (cands.get(n) || 0) + 1); };
   for (const kind of CO_KINDS) {
@@ -334,7 +351,7 @@ export function detectCompany(pageTexts) {
       let after = t.slice(i + kind.length, i + kind.length + 14)
                    .split(/[（(【］\]、。：:0-9０-９]/)[0];
       for (const k2 of CO_KINDS) { const p2 = after.indexOf(k2); if (p2 >= 0) after = after.slice(0, p2); }
-      if (CO_OK.test(after) && !CO_NG.test(after)) add(kind + after);
+      if (CO_OK.test(after) && !CO_NG.test(after) && !CO_EXCLUDE.test(kind + after)) add(kind + after);
       // 前置形（○○株式会社）：直前を名前として読む。長い候補から順に見る
       const before = t.slice(Math.max(0, i - 20), i);
       for (let s = 0; s < before.length; s++) {
@@ -345,17 +362,28 @@ export function detectCompany(pageTexts) {
         cand = cand.replace(/^[年月日期至自現在]+/, "");
         // 「有価証券報告書GMO…」のように直前の見出し語を巻き込むのを防ぐ
         cand = cand.replace(/^(?:有価証券報告書|報告書|書類|表紙|提出会社|会社名|商号|名称|当社|同社)+/, "");
-        if (CO_OK.test(cand) && !CO_NG.test(cand)) { add(cand + kind); break; }
+        if (CO_OK.test(cand) && !CO_NG.test(cand) && !CO_EXCLUDE.test(cand + kind)) { add(cand + kind); break; }
       }
       i += kind.length;
     }
   }
-  const head = (pageTexts[0] || "").slice(0, 200);
-  let best = 0, company = null;
-  for (const [k, v] of cands) {
-    const score = v + (head.includes(k) ? 10 : 0);
-    if (score > best && (v >= 2 || head.includes(k))) { best = score; company = k; }
+  // 1ページ目の表題部にある社名が最も信頼できる。有価証券報告書は必ずここに提出会社名を書く。
+  // 本文には「株式会社を設立」のような文章の断片が何度も出るため、頻度だけで選ぶと負ける。
+  const head = (pageTexts[0] || "").slice(0, 400);
+  const inHead = [...cands.keys()].filter((k) => head.includes(k));
+  if (inHead.length) {
+    // 表題部に複数あるときは、
+    //  ① 表題部での出現位置が最も後ろ（提出会社名は見出しの最後に書かれる）
+    //  ② 同じ位置なら短いほう（余計な語を巻き込んでいない）
+    // の順で選ぶ。長いほうを選ぶと「役員…縦覧に供する場所株式会社」のような塊を掴む。
+    return inHead.sort((a, b) => {
+      const d = head.indexOf(a) - head.indexOf(b);
+      return d !== 0 ? d : a.length - b.length;
+    })[0];
   }
+  // 表題部で見つからないときだけ、2回以上出てくるものを採る
+  let best = 0, company = null;
+  for (const [k, v] of cands) if (v >= 2 && v > best) { best = v; company = k; }
   return company;
 }
 

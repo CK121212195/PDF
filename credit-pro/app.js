@@ -3,10 +3,10 @@
  * 計算は engine.js、Excel生成は xlsx-export.js。ここはUIだけを担当する。
  * ========================================================================== */
 import { evaluate, emptyInput, INDUSTRIES, CAPITAL_TIERS, LISTING_OPTIONS, POLICY }
-  from "./engine.js?v=13";
-import { downloadXlsx } from "./xlsx-export.js?v=13";
-import { checkLicense, payUrl, payUrlReady, companyFingerprint } from "./license.js?v=13";
-import { scanPdf, buildPeriod, validatePeriod, toEngineFields } from "./pdf-extract.js?v=13";
+  from "./engine.js?v=14";
+import { downloadXlsx } from "./xlsx-export.js?v=14";
+import { checkLicense, payUrl, payUrlReady, companyFingerprint, forgetOrder } from "./license.js?v=14";
+import { scanPdf, buildPeriod, validatePeriod, toEngineFields } from "./pdf-extract.js?v=14";
 
 const $ = (id) => document.getElementById(id);
 const COLS = ["今期（直近）", "前期", "前々期"];
@@ -98,18 +98,11 @@ function init() {
   $("btnXlsx").addEventListener("click", onDownload);
   const rc = $("btnRecheck");
   if (rc) rc.addEventListener("click", () => refreshLicense());
-  // テスト用のダウンロード。公開前に index.html の .testbox ごと削除する想定。
-  // ボタンが無ければ何もしないので、削除しても壊れない。
-  const t = $("btnTestXlsx");
-  if (t) t.addEventListener("click", async () => {
-    const note = $("testNote");
-    try {
-      note.textContent = "作成しています…";
-      await downloadXlsx(evaluate(state));
-      note.textContent = "ダウンロードしました。";
-    } catch (e) {
-      note.textContent = "作成に失敗しました：" + e.message;
-    }
+  const fg = $("btnForget");
+  if (fg) fg.addEventListener("click", () => {
+    if (!confirm("この端末に保存された購入情報を消します。まだ有効なお支払いがある場合は、消すと使えなくなります。よろしいですか？")) return;
+    forgetOrder();
+    refreshLicense();
   });
   $("btnRetry").addEventListener("click", refreshLicense);
   $("btnBuy").addEventListener("click", onBuy);
@@ -166,6 +159,12 @@ function showLicenseDiag(st, order, reason, expiresAt) {
   const buy = $("btnBuy"), recheck = $("btnRecheck");
   if (buy) buy.style.opacity = paidButLocked ? ".45" : "";
   if (recheck) recheck.style.fontSize = paidButLocked ? "16px" : "";
+  // 使えない番号（別会社に紐づき済み／期限切れ）が残っていると、
+  // 何度開いても橙色の警告が出続ける。その場合だけ消す手段を出す。
+  const stale = st === "unlicensed" && !!order &&
+                (reason === "other_company" || reason === "expired");
+  const fr = $("forgetRow");
+  if (fr) fr.hidden = !stale;
   const dup = $("dupWarn");
   if (dup) {
     dup.hidden = !paidButLocked;
