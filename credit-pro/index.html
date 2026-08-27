@@ -324,11 +324,15 @@ input,select,textarea,button{font-weight:600}
 .freepaid li{font-size:13.5px;line-height:1.85;color:var(--ink);font-weight:500;margin-bottom:3px;}
 
 /* 注意ボックス */
+/* hidden属性は display:none を指定するだけなので、後から display を指定した要素では効かなくなる。
+   .tip や他の箱で「中身が空の枠だけが残る」現象が起きるため、hidden を最優先で効かせる。 */
+[hidden]{display:none !important;}
 .tip{display:block;border-radius:14px;padding:14px 18px;margin:0 0 16px;
   background:var(--mist);border:1.5px solid var(--line);}
 .tip b{display:block;font-size:15px;font-weight:700;color:var(--ink);margin-bottom:4px;}
 .tip span{display:block;font-size:14px;line-height:1.8;color:var(--ink);font-weight:500;}
 .tip--warn{background:var(--dawn);border-color:var(--warn);}
+.tip--ok{background:var(--mint);border-color:rgba(130,179,58,.45);}
 
 /* 判定に必要な会社情報 */
 #reqBox{margin:18px 0 4px;padding:20px;border:1.5px solid var(--sea);border-radius:16px;
@@ -787,7 +791,7 @@ input,select,textarea,button{font-weight:600}
     </div>
   </main>
 
-  <p class="verstamp">ビルド v12 (2026-08-27)</p>
+  <p class="verstamp">ビルド v13 (2026-08-27)</p>
 
   <footer class="foot">
     <div class="wrap foot__inner">
@@ -805,7 +809,7 @@ input,select,textarea,button{font-weight:600}
 </div>
 
 <script src="./vendor/exceljs.min.js" defer></script>
-<script type="module" src="./app.js?v=12"></script>
+<script type="module" src="./app.js?v=13"></script>
 
 </body>
 </html>

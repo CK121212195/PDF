@@ -3,10 +3,10 @@
  * 計算は engine.js、Excel生成は xlsx-export.js。ここはUIだけを担当する。
  * ========================================================================== */
 import { evaluate, emptyInput, INDUSTRIES, CAPITAL_TIERS, LISTING_OPTIONS, POLICY }
-  from "./engine.js?v=12";
-import { downloadXlsx } from "./xlsx-export.js?v=12";
-import { checkLicense, payUrl, payUrlReady, companyFingerprint } from "./license.js?v=12";
-import { scanPdf, buildPeriod, validatePeriod, toEngineFields } from "./pdf-extract.js?v=12";
+  from "./engine.js?v=13";
+import { downloadXlsx } from "./xlsx-export.js?v=13";
+import { checkLicense, payUrl, payUrlReady, companyFingerprint } from "./license.js?v=13";
+import { scanPdf, buildPeriod, validatePeriod, toEngineFields } from "./pdf-extract.js?v=13";
 
 const $ = (id) => document.getElementById(id);
 const COLS = ["今期（直近）", "前期", "前々期"];
@@ -158,7 +158,9 @@ function showLicenseDiag(st, order, reason, expiresAt) {
     : st === "offline" ? "決済の確認先に接続できませんでした。通信環境をご確認ください。"
     : (reason && byReason[reason]) ||
       (order ? "決済の記録が見つかりません。" : "まだ決済していない状態です。");
-  el.classList.toggle("tip--warn", st === "unlicensed" && reason === "other_company");
+  // 状態が色で分かるようにする。緑＝購入済み、橙＝要対応、既定＝未購入
+  el.classList.toggle("tip--warn", st === "unlicensed" && reason !== null);
+  el.classList.toggle("tip--ok", st === "licensed");
   // すでに支払っている人に、もう一度払わせないための出し分け
   const paidButLocked = st === "unlicensed" && !!order && reason !== "other_company";
   const buy = $("btnBuy"), recheck = $("btnRecheck");
