@@ -59,13 +59,19 @@ function captureOrder() {
  * 1回の決済を1社分に限るための目印として使う。
  * 取引先の名前をこちらのサーバに残さないため、必ずブラウザ内で変換してから送る。
  */
+/* このページが何のサービスかを表す名前。サービスを増やすときは必ず別の値にする。
+   同じ500円のサービスが2つあると、金額だけでは区別できず、
+   片方の支払いでもう片方が解錠できてしまうため、指紋に混ぜて切り分ける。 */
+export const SERVICE_ID = "credit-pro";
+
 export async function companyFingerprint(name) {
   const norm = String(name || "")
     .normalize("NFKC")
     .replace(/[\s　]/g, "")
     .replace(/[（(].*?[）)]/g, "")
     .toLowerCase();
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("co:" + norm));
+  const buf = await crypto.subtle.digest("SHA-256",
+    new TextEncoder().encode("svc:" + SERVICE_ID + "|co:" + norm));
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
 }
 

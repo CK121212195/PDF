@@ -442,7 +442,7 @@ export async function scanPdf(pdfjs, buf, onProgress) {
     data: new Uint8Array(buf),
     useWorkerFetch: false,
     isEvalSupported: false,
-    cMapUrl: new URL("./vendor/cmaps/", import.meta.url).href,
+    cMapUrl: new URL("../vendor/cmaps/", import.meta.url).href,
     cMapPacked: true,
   }).promise;
   const pages = [];

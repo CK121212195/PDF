@@ -3,10 +3,10 @@
  * 計算は engine.js、Excel生成は xlsx-export.js。ここはUIだけを担当する。
  * ========================================================================== */
 import { evaluate, emptyInput, INDUSTRIES, CAPITAL_TIERS, LISTING_OPTIONS, POLICY }
-  from "./engine.js?v=14";
-import { downloadXlsx } from "./xlsx-export.js?v=14";
-import { checkLicense, payUrl, payUrlReady, companyFingerprint, forgetOrder } from "./license.js?v=14";
-import { scanPdf, buildPeriod, validatePeriod, toEngineFields } from "./pdf-extract.js?v=14";
+  from "./engine.js?v=15";
+import { downloadXlsx } from "./xlsx-export.js?v=15";
+import { checkLicense, payUrl, payUrlReady, companyFingerprint, forgetOrder } from "./license.js?v=15";
+import { scanPdf, buildPeriod, validatePeriod, toEngineFields } from "./pdf-extract.js?v=15";
 
 const $ = (id) => document.getElementById(id);
 const COLS = ["今期（直近）", "前期", "前々期"];
@@ -479,8 +479,8 @@ let missingCells = {};   // 読み取れなかった項目 { キー: [期のinde
 
 async function getPdfjs() {
   if (pdfjsLib) return pdfjsLib;
-  pdfjsLib = await import("./vendor/pdf.min.mjs");
-  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdf.worker.min.mjs", import.meta.url).href;
+  pdfjsLib = await import("../vendor/pdf.min.mjs");
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("../vendor/pdf.worker.min.mjs", import.meta.url).href;
   return pdfjsLib;
 }
 
