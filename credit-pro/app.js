@@ -3,10 +3,10 @@
  * 計算は engine.js、Excel生成は xlsx-export.js。ここはUIだけを担当する。
  * ========================================================================== */
 import { evaluate, emptyInput, INDUSTRIES, CAPITAL_TIERS, LISTING_OPTIONS, POLICY }
-  from "./engine.js?v=9";
-import { downloadXlsx } from "./xlsx-export.js?v=9";
-import { checkLicense, payUrl, payUrlReady } from "./license.js?v=9";
-import { scanPdf, buildPeriod, validatePeriod, toEngineFields } from "./pdf-extract.js?v=9";
+  from "./engine.js?v=10";
+import { downloadXlsx } from "./xlsx-export.js?v=10";
+import { checkLicense, payUrl, payUrlReady } from "./license.js?v=10";
+import { scanPdf, buildPeriod, validatePeriod, toEngineFields } from "./pdf-extract.js?v=10";
 
 const $ = (id) => document.getElementById(id);
 const COLS = ["今期（直近）", "前期", "前々期"];
@@ -96,6 +96,8 @@ function init() {
     paint(); render();
   });
   $("btnXlsx").addEventListener("click", onDownload);
+  const rc = $("btnRecheck");
+  if (rc) rc.addEventListener("click", () => refreshLicense());
   // テスト用のダウンロード。公開前に index.html の .testbox ごと削除する想定。
   // ボタンが無ければ何もしないので、削除しても壊れない。
   const t = $("btnTestXlsx");
@@ -153,11 +155,40 @@ function showLicenseDiag(st, order) {
   el.hidden = false;
 }
 
+/**
+ * 決済直後は、Squareからの通知がこちらの確認より遅れて届くことがある。
+ * 1回で諦めると「払ったのに解錠されない」状態のまま終わってしまうため、
+ * 注文番号を持っているのに未購入と出た場合だけ、数秒おきに数回だけ確認し直す。
+ */
+async function pollLicense(order) {
+  for (let i = 0; i < 10; i++) {
+    await new Promise((r) => setTimeout(r, 3000));
+    const el = $("licDiag");
+    if (el) el.innerHTML = `<b>決済の確認中…（${i + 1}回目）</b><span>` +
+      `Squareからの通知が届くまで数十秒かかることがあります。この画面のままお待ちください。<br>` +
+      `注文番号：<code>${esc(String(order))}</code></span>`;
+    const { state } = await checkLicense();
+    if (state === "licensed") {
+      licensed = true;
+      showLicenseDiag("licensed", order);
+      showGate("gateOk");
+      if (window.gtag) gtag("event", "license_ok", { tool: "credit-pro" });
+      return true;
+    }
+    if (state === "offline") break;
+  }
+  showLicenseDiag("unlicensed", order);
+  showGate("gateBuy");
+  return false;
+}
+
 async function refreshLicense() {
   showGate("gateWait");
   const { state: st, order } = await checkLicense();
   licensed = st === "licensed";
   showLicenseDiag(st, order);
+  // 注文番号があるのに未購入なら、通知の到着待ちの可能性が高いので確認し直す
+  if (st === "unlicensed" && order) { pollLicense(order); return; }
   showGate(st === "licensed" ? "gateOk" : st === "offline" ? "gateOffline" : "gateBuy");
   if (st === "licensed" && window.gtag) gtag("event", "license_ok", { tool: "credit-pro" });
 }

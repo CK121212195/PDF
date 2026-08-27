@@ -662,6 +662,9 @@ input,select,textarea,button{font-weight:600}
 
           <!-- 決済の状態を画面に出す。公開前に削除して構いません（残しても害はありません） -->
           <div class="tip" id="licDiag" hidden></div>
+          <p class="note-s" style="margin-top:8px;">決済したのに解錠されない場合は、
+            <button type="button" class="linklike" id="btnRecheck">購入状況をもう一度確認する</button>
+            （Squareからの通知が届くまで数十秒かかることがあります）</p>
 
           <!-- ▼▼▼ テスト用。本番公開の前に、ここから ▲▲▲ までを丸ごと削除してください ▼▼▼ -->
           <div class="testbox" id="testBox">
@@ -782,7 +785,7 @@ input,select,textarea,button{font-weight:600}
     </div>
   </main>
 
-  <p class="verstamp">ビルド v9 (2026-08-27)</p>
+  <p class="verstamp">ビルド v10 (2026-08-27)</p>
 
   <footer class="foot">
     <div class="wrap foot__inner">
@@ -800,7 +803,7 @@ input,select,textarea,button{font-weight:600}
 </div>
 
 <script src="./vendor/exceljs.min.js" defer></script>
-<script type="module" src="./app.js?v=9"></script>
+<script type="module" src="./app.js?v=10"></script>
 
 </body>
 </html>
