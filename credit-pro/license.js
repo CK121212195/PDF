@@ -54,19 +54,45 @@ function captureOrder() {
  * @returns {Promise<{state:"licensed"|"unlicensed"|"offline", order:string|null}>}
  *   offline は「確認できなかった」状態。決済済みの人を締め出さないため区別する。
  */
-export async function checkLicense() {
+/**
+ * 会社名を、そのままでは送らずにハッシュ化する。
+ * 1回の決済を1社分に限るための目印として使う。
+ * 取引先の名前をこちらのサーバに残さないため、必ずブラウザ内で変換してから送る。
+ */
+export async function companyFingerprint(name) {
+  const norm = String(name || "")
+    .normalize("NFKC")
+    .replace(/[\s　]/g, "")
+    .replace(/[（(].*?[）)]/g, "")
+    .toLowerCase();
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("co:" + norm));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
+}
+
+/**
+ * 解錠してよいかをWorkerに尋ねる。
+ * 判定はすべてWorker側で行う。画面のJSは誰でも書き換えられるため、
+ * ここで独自に判断しても意味がないので、返ってきた答えに従うだけにする。
+ */
+export async function checkLicense(fp) {
   const order = captureOrder();
-  if (!order) return { state: "unlicensed", order: null };
+  if (!order) return { state: "unlicensed", order: null, reason: null };
   try {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 8000);
-    const res = await fetch(`${WORKER}/verify?order=${encodeURIComponent(order)}`, { signal: ctl.signal });
+    const q = `order=${encodeURIComponent(order)}` + (fp ? `&fp=${encodeURIComponent(fp)}` : "");
+    const res = await fetch(`${WORKER}/verify?${q}`, { signal: ctl.signal, cache: "no-store" });
     clearTimeout(timer);
-    if (!res.ok) return { state: "offline", order };
+    if (!res.ok) return { state: "offline", order, reason: null };
     const data = await res.json();
-    return { state: data.valid === true ? "licensed" : "unlicensed", order };
+    return {
+      state: data.valid === true ? "licensed" : "unlicensed",
+      order,
+      reason: data.reason || null,
+      expiresAt: data.expiresAt || null,
+    };
   } catch (e) {
-    return { state: "offline", order };
+    return { state: "offline", order, reason: null };
   }
 }
 

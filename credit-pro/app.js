@@ -3,10 +3,10 @@
  * 計算は engine.js、Excel生成は xlsx-export.js。ここはUIだけを担当する。
  * ========================================================================== */
 import { evaluate, emptyInput, INDUSTRIES, CAPITAL_TIERS, LISTING_OPTIONS, POLICY }
-  from "./engine.js?v=10";
-import { downloadXlsx } from "./xlsx-export.js?v=10";
-import { checkLicense, payUrl, payUrlReady } from "./license.js?v=10";
-import { scanPdf, buildPeriod, validatePeriod, toEngineFields } from "./pdf-extract.js?v=10";
+  from "./engine.js?v=11";
+import { downloadXlsx } from "./xlsx-export.js?v=11";
+import { checkLicense, payUrl, payUrlReady, companyFingerprint } from "./license.js?v=11";
+import { scanPdf, buildPeriod, validatePeriod, toEngineFields } from "./pdf-extract.js?v=11";
 
 const $ = (id) => document.getElementById(id);
 const COLS = ["今期（直近）", "前期", "前々期"];
@@ -141,16 +141,25 @@ function showGate(which) {
 }
 
 /** 決済まわりで何が起きているかを画面に出し、切り分けられるようにする */
-function showLicenseDiag(st, order) {
+function showLicenseDiag(st, order, reason, expiresAt) {
   const el = $("licDiag");
   if (!el) return;
   const label = { licensed: "購入済み", unlicensed: "未購入", offline: "確認できず" }[st] || st;
+  // 解錠されない理由は、利用者が次に何をすればよいか分かる言葉で出す
+  const byReason = {
+    other_company: "このお支払いは、別の会社の判定に使われています。1回のお支払いにつき1社分です。この会社の分をご入用の場合は、あらためてお求めください。",
+    expired: "お支払いから24時間が過ぎたため、期限切れになりました。あらためてお求めください。",
+    not_found: "決済の記録が見つかりません。決済直後の場合、記録が届くまで数十秒かかります。少しお待ちください。",
+    no_fingerprint: "会社名が未入力です。会社の基本情報に会社名をご入力ください。",
+  };
   const why =
-    st === "licensed" ? "解錠されています。"
-    : st === "offline" ? "Workerに接続できませんでした。ALLOW_ORIGIN の値とデプロイをご確認ください。"
-    : order ? "注文番号は受け取れていますが、決済記録が見つかりません。Squareのwebhook設定と、Workerが最新版かをご確認ください。"
-    : "まだ決済していない状態です。購入して戻ってくると、ここに注文番号が入ります。";
-  el.innerHTML = `<b>決済の状態：${label}</b><span>持ち帰った注文番号：` +
+    st === "licensed"
+      ? "この会社の分を、" + (expiresAt ? expiresAt.slice(0, 16).replace("T", " ") + " まで" : "24時間") + "何度でもダウンロードできます。"
+    : st === "offline" ? "決済の確認先に接続できませんでした。通信環境をご確認ください。"
+    : (reason && byReason[reason]) ||
+      (order ? "決済の記録が見つかりません。" : "まだ決済していない状態です。");
+  el.classList.toggle("tip--warn", st === "unlicensed" && reason === "other_company");
+  el.innerHTML = `<b>決済の状態：${label}</b><span>注文番号：` +
     `<code>${order ? esc(String(order)) : "（なし）"}</code><br>${why}</span>`;
   el.hidden = false;
 }
@@ -167,28 +176,32 @@ async function pollLicense(order) {
     if (el) el.innerHTML = `<b>決済の確認中…（${i + 1}回目）</b><span>` +
       `Squareからの通知が届くまで数十秒かかることがあります。この画面のままお待ちください。<br>` +
       `注文番号：<code>${esc(String(order))}</code></span>`;
-    const { state } = await checkLicense();
+    const { state, expiresAt } = await checkLicense(await companyFingerprint(state_name()));
     if (state === "licensed") {
       licensed = true;
-      showLicenseDiag("licensed", order);
+      showLicenseDiag("licensed", order, null, expiresAt);
       showGate("gateOk");
       if (window.gtag) gtag("event", "license_ok", { tool: "credit-pro" });
       return true;
     }
     if (state === "offline") break;
   }
-  showLicenseDiag("unlicensed", order);
+  showLicenseDiag("unlicensed", order, "not_found");
   showGate("gateBuy");
   return false;
 }
 
+/** 判定に使っている会社名（Workerには送らず、ハッシュ化して使う） */
+function state_name() { return state && state.name ? state.name : ""; }
+
 async function refreshLicense() {
   showGate("gateWait");
-  const { state: st, order } = await checkLicense();
+  const fp = await companyFingerprint(state_name());
+  const { state: st, order, reason, expiresAt } = await checkLicense(fp);
   licensed = st === "licensed";
-  showLicenseDiag(st, order);
-  // 注文番号があるのに未購入なら、通知の到着待ちの可能性が高いので確認し直す
-  if (st === "unlicensed" && order) { pollLicense(order); return; }
+  showLicenseDiag(st, order, reason, expiresAt);
+  // 決済直後は通知の到着が遅れることがあるので、記録が無いときだけ確認し直す
+  if (st === "unlicensed" && order && reason === "not_found") { pollLicense(order); return; }
   showGate(st === "licensed" ? "gateOk" : st === "offline" ? "gateOffline" : "gateBuy");
   if (st === "licensed" && window.gtag) gtag("event", "license_ok", { tool: "credit-pro" });
 }
@@ -201,6 +214,14 @@ function onBuy(e) {
   e.preventDefault();
   // 支払いリンクが未設定のまま押されたときは、遷移せずに理由を出す。
   // 黙ってSquareのエラーページへ飛ばすと、原因の切り分けができなくなる。
+  // 会社名が空だと、決済しても「どの会社の分か」を確定できず解錠できない
+  if (!state_name().trim()) {
+    $("buyNote").textContent =
+      "会社名をご入力ください。お支払いは1社分ごとのため、会社名が必要です（「会社の基本情報」欄）。";
+    $("f_name")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    $("f_name")?.focus();
+    return;
+  }
   if (!payUrlReady()) {
     // 何が読み込まれているかを必ず表示する。
     // 「直したのに直らない」の大半は、ブラウザが古いlicense.jsを使っているだけなので、
