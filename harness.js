@@ -10,9 +10,9 @@
  *     ② 経常利益の整合 … 営業利益＋営業外収益−営業外費用 が記載の経常利益と一致するか
  *   この2つは互いに独立した経路の数値なので、両方通れば抽出はほぼ正しい。
  * ========================================================================== */
-import { scanPdf, buildPeriod, validatePeriod, toEngineFields } from "./pdf-extract.js?v=11";
-import { evaluate, emptyInput, INDUSTRIES, CAPITAL_TIERS, LISTING_OPTIONS } from "./engine.js?v=11";
-import { downloadXlsx } from "./xlsx-export.js?v=11";
+import { scanPdf, buildPeriod, validatePeriod, toEngineFields } from "./pdf-extract.js?v=12";
+import { evaluate, emptyInput, INDUSTRIES, CAPITAL_TIERS, LISTING_OPTIONS } from "./engine.js?v=12";
+import { downloadXlsx } from "./xlsx-export.js?v=12";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));

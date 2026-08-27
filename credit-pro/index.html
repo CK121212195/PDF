@@ -662,6 +662,7 @@ input,select,textarea,button{font-weight:600}
           <p class="note-s" style="margin-top:12px;">入力した内容はこの画面に残ります。決済後、同じ内容のまま続けてダウンロードできます。</p>
 
           <!-- 決済の状態を画面に出す。公開前に削除して構いません（残しても害はありません） -->
+          <div class="tip tip--warn" id="dupWarn" hidden></div>
           <div class="tip" id="licDiag" hidden></div>
           <p class="note-s" style="margin-top:8px;">決済したのに解錠されない場合は、
             <button type="button" class="linklike" id="btnRecheck">購入状況をもう一度確認する</button>
@@ -786,7 +787,7 @@ input,select,textarea,button{font-weight:600}
     </div>
   </main>
 
-  <p class="verstamp">ビルド v11 (2026-08-27)</p>
+  <p class="verstamp">ビルド v12 (2026-08-27)</p>
 
   <footer class="foot">
     <div class="wrap foot__inner">
@@ -804,7 +805,7 @@ input,select,textarea,button{font-weight:600}
 </div>
 
 <script src="./vendor/exceljs.min.js" defer></script>
-<script type="module" src="./app.js?v=11"></script>
+<script type="module" src="./app.js?v=12"></script>
 
 </body>
 </html>

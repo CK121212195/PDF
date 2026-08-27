@@ -3,10 +3,10 @@
  * 計算は engine.js、Excel生成は xlsx-export.js。ここはUIだけを担当する。
  * ========================================================================== */
 import { evaluate, emptyInput, INDUSTRIES, CAPITAL_TIERS, LISTING_OPTIONS, POLICY }
-  from "./engine.js?v=11";
-import { downloadXlsx } from "./xlsx-export.js?v=11";
-import { checkLicense, payUrl, payUrlReady, companyFingerprint } from "./license.js?v=11";
-import { scanPdf, buildPeriod, validatePeriod, toEngineFields } from "./pdf-extract.js?v=11";
+  from "./engine.js?v=12";
+import { downloadXlsx } from "./xlsx-export.js?v=12";
+import { checkLicense, payUrl, payUrlReady, companyFingerprint } from "./license.js?v=12";
+import { scanPdf, buildPeriod, validatePeriod, toEngineFields } from "./pdf-extract.js?v=12";
 
 const $ = (id) => document.getElementById(id);
 const COLS = ["今期（直近）", "前期", "前々期"];
@@ -159,6 +159,19 @@ function showLicenseDiag(st, order, reason, expiresAt) {
     : (reason && byReason[reason]) ||
       (order ? "決済の記録が見つかりません。" : "まだ決済していない状態です。");
   el.classList.toggle("tip--warn", st === "unlicensed" && reason === "other_company");
+  // すでに支払っている人に、もう一度払わせないための出し分け
+  const paidButLocked = st === "unlicensed" && !!order && reason !== "other_company";
+  const buy = $("btnBuy"), recheck = $("btnRecheck");
+  if (buy) buy.style.opacity = paidButLocked ? ".45" : "";
+  if (recheck) recheck.style.fontSize = paidButLocked ? "16px" : "";
+  const dup = $("dupWarn");
+  if (dup) {
+    dup.hidden = !paidButLocked;
+    dup.innerHTML = paidButLocked
+      ? `<b>お支払いは受け付けられています。もう一度お支払いなさらないでください</b><span>` +
+        `確認が済んでいないだけです。「購入状況をもう一度確認する」を押すか、時間をおいて開き直してください。</span>`
+      : "";
+  }
   el.innerHTML = `<b>決済の状態：${label}</b><span>注文番号：` +
     `<code>${order ? esc(String(order)) : "（なし）"}</code><br>${why}</span>`;
   el.hidden = false;
@@ -170,12 +183,27 @@ function showLicenseDiag(st, order, reason, expiresAt) {
  * 注文番号を持っているのに未購入と出た場合だけ、数秒おきに数回だけ確認し直す。
  */
 async function pollLicense(order) {
-  for (let i = 0; i < 10; i++) {
-    await new Promise((r) => setTimeout(r, 3000));
+  // Squareからの通知は、実測で2分ほどかかることがある。
+  // 「止まっている」と誤解されないよう、経過秒数を出しながら最大3分待つ。
+  const TRIES = 60, WAIT = 3000;
+  showGate("gateWait");
+  for (let i = 0; i < TRIES; i++) {
+    await new Promise((r) => setTimeout(r, WAIT));
+    const sec = Math.round(((i + 1) * WAIT) / 1000);
     const el = $("licDiag");
-    if (el) el.innerHTML = `<b>決済の確認中…（${i + 1}回目）</b><span>` +
-      `Squareからの通知が届くまで数十秒かかることがあります。この画面のままお待ちください。<br>` +
-      `注文番号：<code>${esc(String(order))}</code></span>`;
+    if (el) {
+      el.classList.remove("tip--warn");
+      el.innerHTML =
+        `<b>お支払いを確認しています… 経過 ${sec} 秒</b><span>` +
+        `Square からの入金通知が届くまで、<b>2分ほどかかることがあります</b>。` +
+        `この画面を開いたままお待ちください。確認できしだい、ダウンロードボタンが出ます。<br>` +
+        `ページを閉じても、あとで開き直せば続きから確認できます。<br>` +
+        `注文番号：<code>${esc(String(order))}</code></span>`;
+    }
+    const wait = $("gateWait");
+    if (wait) wait.innerHTML =
+      `<p class="note-s"><b>お支払いを確認しています…（経過 ${sec} 秒／最大3分）</b><br>` +
+      `Squareからの通知待ちです。この画面のままお待ちください。</p>`;
     const { state, expiresAt } = await checkLicense(await companyFingerprint(state_name()));
     if (state === "licensed") {
       licensed = true;
@@ -186,7 +214,15 @@ async function pollLicense(order) {
     }
     if (state === "offline") break;
   }
-  showLicenseDiag("unlicensed", order, "not_found");
+  const el = $("licDiag");
+  if (el) {
+    el.classList.add("tip--warn");
+    el.innerHTML = `<b>3分待っても確認できませんでした</b><span>` +
+      `お支払いが完了していれば、記録は必ず後から届きます。<b>二重にお支払いなさらないでください。</b><br>` +
+      `少し時間をおいて「購入状況をもう一度確認する」を押すか、このページを開き直してください。<br>` +
+      `それでも解錠されない場合は、この注文番号を添えてお問い合わせください：<code>${esc(String(order))}</code></span>`;
+    el.hidden = false;
+  }
   showGate("gateBuy");
   return false;
 }
@@ -390,20 +426,29 @@ function report(r) {
 
 /* -------------------------------------------------------------- ダウンロード */
 async function onDownload() {
-  // ボタンの表示状態だけに頼らず、実行の直前にもう一度確認する
-  const { state: st } = await checkLicense();
+  const btn0 = $("btnXlsx");
+  $("dlNote").textContent = "確認しています…";
+  // ボタンの表示状態だけに頼らず、実行の直前にもう一度確認する。
+  // このとき会社名の指紋を必ず一緒に送る。送り忘れると
+  // 「別の会社に使い回そうとしている」と判定され、解錠が取り消されてしまう。
+  const { state: st, order, reason, expiresAt } =
+    await checkLicense(await companyFingerprint(state_name()));
   if (st !== "licensed") {
     licensed = false;
+    showLicenseDiag(st, order, reason, expiresAt);
+    $("dlNote").textContent = "";
     showGate(st === "offline" ? "gateOffline" : "gateBuy");
     return;
   }
+  $("dlNote").textContent = "";
   const r = evaluate(state);
   if (r.fy.some((x) => Math.abs(x.balanceCheck) > 0.5) &&
       !confirm("貸借対照表の検算が0になっていません。このまま出力しますか？")) return;
   const btn = $("btnXlsx");
   btn.disabled = true;
   const label = btn.textContent;
-  btn.textContent = "作成中…";
+  btn.textContent = "Excelを作成中…";
+  $("dlNote").textContent = "ファイルを組み立てています。数秒かかります。";
   try {
     await downloadXlsx(r);
     $("dlNote").textContent = "ダウンロードしました";
